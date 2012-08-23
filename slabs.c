@@ -88,6 +88,21 @@ unsigned int slabs_clsid(const size_t size) {
     return res;
 }
 
+/* 
+ * Required slabs_lock
+ */
+unsigned int spare_larger_clsid(unsigned int id) {
+    int res = id;
+
+    if (id == 0) return 0;    
+
+    while (slabclass[res].sl_curr == 0) {
+        if (res++ == power_largest) return 0;
+    }
+    
+    return res;
+}
+
 /**
  * Determines the chunk sizes and initializes the slab class descriptors
  * accordingly.
@@ -215,26 +230,39 @@ static int do_slabs_newslab(const unsigned int id) {
 
     return 1;
 }
-
+   
+/*
+    2012_08_28 : use spare_larger_clsid
+ */
 /*@null@*/
-static void *do_slabs_alloc(const size_t size, unsigned int id) {
+static void *do_slabs_alloc(const size_t size, unsigned int *id) {
     slabclass_t *p;
     void *ret = NULL;
     item *it = NULL;
 
-    if (id < POWER_SMALLEST || id > power_largest) {
+    if (*id < POWER_SMALLEST || *id > power_largest) {
         MEMCACHED_SLABS_ALLOCATE_FAILED(size, 0);
         return NULL;
     }
 
-    p = &slabclass[id];
+    p = &slabclass[*id];
     assert(p->sl_curr == 0 || ((item *)p->slots)->slabs_clsid == 0);
 
     /* fail unless we have space at the end of a recently allocated page,
-       we have something on our freelist, or we could allocate a new page */
-    if (! (p->sl_curr != 0 || do_slabs_newslab(id) != 0)) {
+       we have something on our freelist, or we could allocate a new page */    
+    if (! (p->sl_curr != 0 || do_slabs_newslab(*id) != 0 || spare_larger_clsid(id) != 0)) {
         /* We don't have more memory available */
         ret = NULL;
+    } else if (p->sl_curr == 0) {
+        //unsigned int new_id = spare_larger_clsid(id);
+        assert(*id != 0);
+        p = &slabclass[*id];
+        it = (item *)p->slots;
+        p->slots = it->next;
+        if (it->next) it->next->prev = 0;
+        p->sl_curr--;
+        ret = (void *)it;
+
     } else if (p->sl_curr != 0) {
         /* return off our freelist */
         it = (item *)p->slots;
@@ -246,9 +274,9 @@ static void *do_slabs_alloc(const size_t size, unsigned int id) {
 
     if (ret) {
         p->requested += size;
-        MEMCACHED_SLABS_ALLOCATE(size, id, p->size, ret);
+        MEMCACHED_SLABS_ALLOCATE(size, *id, p->size, ret);
     } else {
-        MEMCACHED_SLABS_ALLOCATE_FAILED(size, id);
+        MEMCACHED_SLABS_ALLOCATE_FAILED(size, *id);
     }
 
     return ret;
@@ -400,11 +428,11 @@ static void *memory_allocate(size_t size) {
     return ret;
 }
 
-void *slabs_alloc(size_t size, unsigned int id) {
+void *slabs_alloc(size_t size, unsigned int *id) {
     void *ret;
 
     pthread_mutex_lock(&slabs_lock);
-    ret = do_slabs_alloc(size, id);
+    ret = do_slabs_alloc(size, *id);
     pthread_mutex_unlock(&slabs_lock);
     return ret;
 }

@@ -56,11 +56,11 @@ uint64_t get_cas_id(void) {
 
 /* Enable this for reference-count debugging. */
 #if 0
-# define DEBUG_REFCNT(it,op) \
-                fprintf(stderr, "item %x refcnt(%c) %d %c%c%c\n", \
-                        it, op, it->refcount, \
-                        (it->it_flags & ITEM_LINKED) ? 'L' : ' ', \
-                        (it->it_flags & ITEM_SLABBED) ? 'S' : ' ')
+# define DEBUG_REFCNT(it,op)                            \
+    fprintf(stderr, "item %x refcnt(%c) %d %c%c%c\n",   \
+            it, op, it->refcount,                       \
+            (it->it_flags & ITEM_LINKED) ? 'L' : ' ',   \
+            (it->it_flags & ITEM_SLABBED) ? 'S' : ' ')
 #else
 # define DEBUG_REFCNT(it,op) while(0)
 #endif
@@ -78,7 +78,7 @@ uint64_t get_cas_id(void) {
  * Returns the total size of the header.
  */
 static size_t item_make_header(const uint8_t nkey, const int flags, const int nbytes,
-                     char *suffix, uint8_t *nsuffix) {
+                               char *suffix, uint8_t *nsuffix) {
     /* suffix is defined at 40 chars elsewhere.. */
     *nsuffix = (uint8_t) snprintf(suffix, 40, " %d %d\r\n", flags, nbytes - 2);
     return sizeof(item) + nkey + *nsuffix + nbytes;
@@ -122,7 +122,7 @@ item *do_item_alloc(char *key, const size_t nkey, const int flags, const rel_tim
             do_item_unlink_nolock(it, hash(ITEM_key(it), it->nkey, 0));
             /* Initialize the item block: */
             it->slabs_clsid = 0;
-        } else if ((it = slabs_alloc(ntotal, id)) == NULL) {
+        } else if ((it = slabs_alloc(ntotal, &id)) == NULL) {
             if (settings.evict_to_free == 0) {
                 itemstats[id].outofmemory++;
                 mutex_unlock(&cache_lock);
@@ -161,7 +161,7 @@ item *do_item_alloc(char *key, const size_t nkey, const int flags, const rel_tim
         }
     } else {
         /* If the LRU is empty or locked, attempt to allocate memory */
-        it = slabs_alloc(ntotal, id);
+        it = slabs_alloc(ntotal, &id);
         if (search != NULL)
             refcount_decr(&search->refcount);
     }
