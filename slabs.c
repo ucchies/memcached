@@ -91,16 +91,20 @@ unsigned int slabs_clsid(const size_t size) {
 /* 
  * Required slabs_lock
  */
-unsigned int spare_larger_clsid(unsigned int id) {
-    int res = id;
+int spare_larger_clsid(unsigned int *id) {
+    int res = *id;
 
-    if (id == 0) return 0;    
+    if (*id == 0) return 0;    
 
     while (slabclass[res].sl_curr == 0) {
-        if (res++ == power_largest) return 0;
+        if (res++ == power_largest) {
+            *id = 0;
+            return 0;
+        }
     }
     
-    return res;
+    *id = res;
+    return 1;
 }
 
 /**
@@ -178,8 +182,8 @@ static void slabs_preallocate (const unsigned int maxslabs) {
             return;
         if (do_slabs_newslab(i) == 0) {
             fprintf(stderr, "Error while preallocating slab memory!\n"
-                "If using -L or other prealloc options, max memory must be "
-                "at least %d megabytes.\n", power_largest);
+                    "If using -L or other prealloc options, max memory must be "
+                    "at least %d megabytes.\n", power_largest);
             exit(1);
         }
     }
@@ -232,8 +236,9 @@ static int do_slabs_newslab(const unsigned int id) {
 }
    
 /*
-    2012_08_28 : use spare_larger_clsid
- */
+  2012_08_28 : use spare_larger_clsid
+*/
+/* 2012_08_29 : id -> *id */
 /*@null@*/
 static void *do_slabs_alloc(const size_t size, unsigned int *id) {
     slabclass_t *p;
@@ -428,11 +433,12 @@ static void *memory_allocate(size_t size) {
     return ret;
 }
 
+/* 2012_08_29 : id -> *id */
 void *slabs_alloc(size_t size, unsigned int *id) {
     void *ret;
 
     pthread_mutex_lock(&slabs_lock);
-    ret = do_slabs_alloc(size, *id);
+    ret = do_slabs_alloc(size, id);
     pthread_mutex_unlock(&slabs_lock);
     return ret;
 }

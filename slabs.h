@@ -18,8 +18,14 @@ void slabs_init(const size_t limit, const double factor, const bool prealloc);
 
 unsigned int slabs_clsid(const size_t size);
 
+/* 2012_08_29 : Added */
+/* Required slabs_lock */
+/* 2012_08_31 : return new_id -> no return -> return int(for check) */
+int spare_larger_clsid(unsigned int *id);
+
 /** Allocate object of given length. 0 on error */ /*@null@*/
-void *slabs_alloc(const size_t size, unsigned int id);
+/* 2012_08_31 : id -> *id */
+void *slabs_alloc(const size_t size, unsigned int *id);
 
 /** Free previously allocated object */
 void slabs_free(void *ptr, size_t size, unsigned int id);
